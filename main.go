@@ -1,20 +1,14 @@
 package main
 
 import (
-	"log"
-	"os"
-	"strings"
-
+	http "github.com/bogdanfinn/fhttp"
 	"github.com/gin-gonic/gin"
 	"github.com/linweiyuan/go-chatgpt-api/api"
-	"github.com/linweiyuan/go-chatgpt-api/api/chatgpt"
 	"github.com/linweiyuan/go-chatgpt-api/api/imitate"
-	"github.com/linweiyuan/go-chatgpt-api/api/platform"
-	"github.com/linweiyuan/go-chatgpt-api/api/token"
 	_ "github.com/linweiyuan/go-chatgpt-api/env"
 	"github.com/linweiyuan/go-chatgpt-api/middleware"
-
-	http "github.com/bogdanfinn/fhttp"
+	"log"
+	"os"
 )
 
 func init() {
@@ -29,11 +23,8 @@ func main() {
 	router.Use(middleware.CORS())
 	router.Use(middleware.Authorization())
 
-	setupChatGPTAPIs(router)
-	setupPlatformAPIs(router)
-	setupPandoraAPIs(router)
-	setupImitateAPIs(router)
-	setupTokenAPIs(router)
+	setupChatGPTWebToAPI(router)
+	setupAdminAPI(router)
 	router.NoRoute(api.Proxy)
 
 	router.GET("/", func(c *gin.Context) {
@@ -50,57 +41,22 @@ func main() {
 	}
 }
 
-//goland:noinspection SpellCheckingInspection
-func setupChatGPTAPIs(router *gin.Engine) {
-	chatgptGroup := router.Group("/chatgpt")
+func setupChatGPTWebToAPI(router *gin.Engine) {
+	group := router.Group("/v1")
 	{
-		chatgptGroup.POST("/login", chatgpt.Login)
-		chatgptGroup.POST("/backend-api/login", chatgpt.Login) // add support for other projects
-
-		conversationGroup := chatgptGroup.Group("/backend-api/conversation")
-		{
-			conversationGroup.POST("", chatgpt.CreateConversation)
-		}
+		group.POST("/chat/completions", imitate.CreateChatCompletions)
 	}
 }
 
-func setupPlatformAPIs(router *gin.Engine) {
-	platformGroup := router.Group("/platform")
+func setupAdminAPI(router *gin.Engine) {
+	group := router.Group("/admin")
 	{
-		platformGroup.POST("/login", platform.Login)
-		platformGroup.POST("/v1/login", platform.Login)
+		group.POST("/user/token", imitate.AdminTokenGet)
 
-		apiGroup := platformGroup.Group("/v1")
-		{
-			apiGroup.POST("/chat/completions", platform.CreateChatCompletions)
-			apiGroup.POST("/completions", platform.CreateCompletions)
-		}
-	}
-}
+		group.POST("/user/add", imitate.AdminUserAdd)
 
-//goland:noinspection SpellCheckingInspection
-func setupPandoraAPIs(router *gin.Engine) {
-	router.Any("/api/*path", func(c *gin.Context) {
-		c.Request.URL.Path = strings.ReplaceAll(c.Request.URL.Path, "/api", "/chatgpt/backend-api")
-		router.HandleContext(c)
-	})
-}
+		group.POST("/token/add", imitate.AdminTokenAdd)
 
-func setupImitateAPIs(router *gin.Engine) {
-	imitateGroup := router.Group("/imitate")
-	{
-		imitateGroup.POST("/login", chatgpt.Login)
-
-		apiGroup := imitateGroup.Group("/v1")
-		{
-			apiGroup.POST("/chat/completions", imitate.CreateChatCompletions)
-		}
-	}
-}
-
-func setupTokenAPIs(router *gin.Engine) {
-	tokenGroup := router.Group("/token")
-	{
-		tokenGroup.GET("/arkose", token.GetArkoseToken)
+		group.GET("/token/count", imitate.AdminTokenCount)
 	}
 }

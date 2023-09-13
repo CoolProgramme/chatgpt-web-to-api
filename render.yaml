@@ -1,7 +1,7 @@
 services:
   - type: web
-    name: go-chatgpt-api
+    name: chatgpt-web-to-api
     runtime: go
     plan: free
-    buildCommand: go build -ldflags="-w -s" -o go-chatgpt-api main.go
-    startCommand: ./go-chatgpt-api
+    buildCommand: go build -ldflags="-w -s" -o chatgpt-web-to-api main.go
+    startCommand: ./chatgpt-web-to-api

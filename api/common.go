@@ -47,7 +47,9 @@ const (
 	EmailKey                       = "email"
 	AccountDeactivatedErrorMessage = "Account %s is deactivated."
 
-	ReadyHint = "Service go-chatgpt-api is ready."
+	ReadyHint = "service is ready."
+
+	AdminAddUserInfoErrorMessage = "Failed to add user info."
 )
 
 var (

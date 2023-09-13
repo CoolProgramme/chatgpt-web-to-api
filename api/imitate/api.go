@@ -5,18 +5,19 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"os"
-	"regexp"
-	"strings"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/linweiyuan/go-chatgpt-api/api"
 	"github.com/linweiyuan/go-chatgpt-api/api/chatgpt"
 	"github.com/linweiyuan/go-logger/logger"
 	"github.com/xqdoo00o/funcaptcha"
+	"io"
+	"os"
+	"regexp"
+	"strings"
+	"sync"
 
 	http "github.com/bogdanfinn/fhttp"
 )
@@ -26,6 +27,8 @@ var (
 	arkoseTokenUrl string
 	bx             string
 	reg            *regexp.Regexp
+	users          map[string]api.LoginInfo
+	tokens         []string
 )
 
 //goland:noinspection SpellCheckingInspection
@@ -37,6 +40,8 @@ func init() {
 	if err != nil {
 		panic(fmt.Sprintf("Error compiling regex: %v", err))
 	}
+	users = make(map[string]api.LoginInfo)
+	tokens = make([]string, 0)
 }
 
 func CreateChatCompletions(c *gin.Context) {
@@ -53,13 +58,32 @@ func CreateChatCompletions(c *gin.Context) {
 	}
 
 	authHeader := c.GetHeader(api.AuthorizationHeader)
-	token := os.Getenv("IMITATE_ACCESS_TOKEN")
+	var token string
 	if authHeader != "" {
 		customAccessToken := strings.Replace(authHeader, "Bearer ", "", 1)
 		// Check if customAccessToken starts with sk-
 		if strings.HasPrefix(customAccessToken, "eyJhbGciOiJSUzI1NiI") {
 			token = customAccessToken
+		} else if customAccessToken == "sk-api-luyuai-top-free-token-for-everyone" {
+			token, err = nextToken()
+			if err != nil {
+				c.JSON(500, gin.H{"error": gin.H{
+					"message": "The current token pool is empty",
+					"type":    "invalid_request_error",
+					"param":   nil,
+					"code":    err.Error(),
+				}})
+				return
+			}
 		}
+	} else {
+		c.JSON(500, gin.H{"error": gin.H{
+			"message": "Authentication error",
+			"type":    "invalid_request_error",
+			"param":   nil,
+			"code":    err.Error(),
+		}})
+		return
 	}
 
 	// 将聊天请求转换为ChatGPT请求。
@@ -127,6 +151,24 @@ func CreateChatCompletions(c *gin.Context) {
 	} else {
 		c.String(200, "data: [DONE]\n\n")
 	}
+}
+
+var current = 0
+var mu sync.Mutex
+
+func nextToken() (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	length := len(tokens)
+	if length == 0 {
+		return "", errors.New("tokens array is empty")
+	}
+	if current >= length {
+		current = 0
+	}
+	token := tokens[current]
+	current++
+	return token, nil
 }
 
 func generateId() string {
@@ -231,6 +273,14 @@ func sendConversationRequest(c *gin.Context, request chatgpt.CreateConversationR
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
+			tokensAppendLock.Lock()
+			defer tokensAppendLock.Unlock()
+			for i, token := range tokens {
+				if token == accessToken {
+					tokens = append(tokens[:i], tokens[i+1:]...)
+					break
+				}
+			}
 			logger.Error(fmt.Sprintf(api.AccountDeactivatedErrorMessage, c.GetString(api.EmailKey)))
 		}
 
